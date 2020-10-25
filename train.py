@@ -96,12 +96,42 @@ def main(args, init_distributed=False):
         # save checkpoint
         if epoch_itr.epoch % args.save_interval == 0:
             checkpoint_utils.save_checkpoint(args, trainer, epoch_itr, valid_losses[0])
-
+        should_stop = should_stop_early(args, valid_losses[0])
+        if should_stop:
+            break  
         reload_dataset = ':' in getattr(args, 'data', '')
         # sharded data: get train iterator for next epoch
         epoch_itr = trainer.get_train_iterator(epoch_itr.epoch, load_dataset=reload_dataset)
     train_meter.stop()
     print('| done training in {:.1f} seconds'.format(train_meter.sum))
+
+
+def should_stop_early(args, valid_loss):
+    # skip check if no validation was done in the current epoch
+    if valid_loss is None:
+        return False
+    if args.patience <= 0:
+        return False
+
+    def is_better(a, b):
+        return a > b if args.maximize_best_checkpoint_metric else a < b
+
+    prev_best = getattr(should_stop_early, "best", None)
+    # print(prev_best)
+    if prev_best is None or is_better(valid_loss, prev_best):
+        should_stop_early.best = valid_loss
+        should_stop_early.num_runs = 0
+        return False
+    else:
+        should_stop_early.num_runs += 1
+        if should_stop_early.num_runs >= args.patience:
+            print( "early stop since valid performance hasn't improved for last {} runs".format(
+                    args.patience
+                )
+            )
+            return True
+        else:
+            return False
 
 
 def train(args, trainer, task, epoch_itr):
