@@ -1,4 +1,4 @@
-#!/usr/bin/env python3 -u
+#!/usr/bin/env python4 -u
 # Copyright (c) Facebook, Inc. and its affiliates.
 #
 # This source code is licensed under the MIT license found in the
@@ -8,7 +8,7 @@ Translate pre-processed data with a trained model.
 """
 
 import torch
-
+import os
 from fairseq import bleu, checkpoint_utils, options, progress_bar, tasks, utils
 from fairseq.meters import StopwatchMeter, TimeMeter
 
@@ -17,6 +17,17 @@ def main(args):
     assert args.path is not None, '--path required for generation!'
     assert not args.sampling or args.nbest == args.beam, \
         '--sampling requires --nbest to be equal to --beam'
+
+    if args.results_path is not None:
+        os.makedirs(args.results_path, exist_ok=True)
+        output_path = os.path.join(args.results_path, 'generate-{}.txt'.format(args.gen_subset))
+        with open(output_path, 'w', buffering=1, encoding='utf-8') as h:
+            return _main(args, h)
+    else:
+        return _main(args, sys.stdout)
+
+
+def _main(args, output_file):
 
     utils.import_user_module(args)
 
@@ -118,9 +129,9 @@ def main(args):
 
                 if not args.quiet:
                     if src_dict is not None:
-                        print('S-{}\t{}'.format(sample_id, src_str))
+                        print('S-{}\t{}'.format(sample_id, src_str), file=output_file)
                     if has_target:
-                        print('T-{}\t{}'.format(sample_id, target_str))
+                        print('T-{}\t{}'.format(sample_id, target_str), file=output_file)
 
                 # Process top predictions
                 for j, hypo in enumerate(hypos[i][:args.nbest]):
@@ -132,17 +143,17 @@ def main(args):
                     )
 
                     if not args.quiet:
-                        print('H-{}\t{}\t{}'.format(sample_id, hypo['score'], hypo_str))
+                        print('H-{}\t{}\t{}'.format(sample_id, hypo['score'], hypo_str), file=output_file)
                         print('P-{}\t{}'.format(
                             sample_id,
                             ' '.join(map(
                                 lambda x: '{:.4f}'.format(x),
                                 hypo['positional_scores'].tolist(),
                             ))
-                        ))
+                        ), file=output_file)
 
                         if args.print_step:
-                            print('I-{}\t{}'.format(sample_id, hypo['steps']))
+                            print('I-{}\t{}'.format(sample_id, hypo['steps']), file=output_file)
 
                         if getattr(args, 'retain_iter_history', False):
                             print("\n".join([
@@ -151,7 +162,7 @@ def main(args):
                                         utils.post_process_prediction(
                                             h['tokens'].int().cpu(),
                                             src_str, None, None, tgt_dict, None)[1])
-                                        for step, h in enumerate(hypo['history'])]))
+                                        for step, h in enumerate(hypo['history'])]), file=output_file)
 
                     # Score only the top hypothesis
                     if has_target and j == 0:
